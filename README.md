@@ -12,7 +12,7 @@ Bu proje, Türkiye'nin Gayri Safi Yurt İçi Hasıla (GSYİH) verileri ile İşs
 
 ## Proje Hakkında
 
-Bu çalışmanın temel amacı, ekonomik büyüme (GSYİH) ile işsizlik oranları arasındaki ilişkiyi incelemektir. Proje kapsamında:
+Bu çalışmanın temel amacı, ekonomik büyüme (GSYİH) ile işsizlik oranları arasındaki ilişkiyi incelemektir. Bu ilişki literatürde **Okun Yasası (Okun's Law)** olarak bilinir. Proje kapsamında:
 - Zaman serisi grafikleri oluşturulmuş,
 - Temel istatistiksel özetler çıkarılmış,
 - İki değişken arasındaki korelasyon hesaplanmış ve serpilme diyagramı ile görselleştirilmiştir.
@@ -27,10 +27,10 @@ okuns-law-analysis/
 │   ├── gsyih.csv             # GSYİH verileri (Çeyreklik)
 │   └── unemployment-rate.csv # İşsizlik oranı verileri (Aylık)
 ├── output/                    # Oluşturulan raporların kaydedildiği klasör
-│   ├── gsyih_analizi.html    # GSYİH analiz raporu çıktısı
-│   └── issizlik_analizi.html # İşsizlik analiz raporu çıktısı
-├── gsyih_analizi.Rmd          # GSYİH analizi için R Markdown kaynak kodu
-├── issizlik_analizi.Rmd       # İşsizlik analizi için R Markdown kaynak kodu
+│   ├── gdp_analysis.html    # GSYİH analiz raporu çıktısı
+│   └── unemployment_analysis.html # İşsizlik analiz raporu çıktısı
+├── gdp_analysis.Rmd          # GSYİH analizi için R Markdown kaynak kodu
+├── unemployment_analysis.Rmd       # İşsizlik analizi için R Markdown kaynak kodu
 ├── run_analysis.R             # Tüm analizleri çalıştırıp raporları üreten ana R betiği
 └── README.md                  # Proje dokümantasyonu
 ```
@@ -49,16 +49,16 @@ Terminal veya R konsolundan aşağıdaki komutu kullanarak projeyi çalıştıra
 Rscript run_analysis.R
 ```
 
-Bu işlem sonucunda `output` klasörü içerisinde `gsyih_analizi.html` ve `issizlik_analizi.html` dosyaları oluşacaktır.
+Bu işlem sonucunda `output` klasörü içerisinde `gdp_analysis.html` ve `unemployment_analysis.html` dosyaları oluşacaktır.
 
 ## Analiz İçeriği
 
-### 1. GSYİH Analizi (`gsyih_analizi.Rmd`)
+### 1. GSYİH Analizi (`gdp_analysis.Rmd`)
 - GSYİH verilerinin zaman içindeki değişimi görselleştirilir.
 - Çeyreklik bazda veriler işlenir.
 - İşsizlik verisi ile birleştirilerek korelasyon katsayısı hesaplanır.
 
-### 2. İşsizlik Analizi (`issizlik_analizi.Rmd`)
+### 2. İşsizlik Analizi (`unemployment_analysis.Rmd`)
 - İşsizlik oranlarının aylık değişimi incelenir.
 - GSYİH verisi ile birleştirilerek ekonomik büyümenin işsizlik üzerindeki etkisi görselleştirilir.
 

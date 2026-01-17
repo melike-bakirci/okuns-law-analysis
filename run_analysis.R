@@ -35,9 +35,9 @@ if (!dir.exists("output")) {
 }
 
 # Render the Rmd files
-message("Rendering gsyih_analizi.Rmd...")
-rmarkdown::render("gsyih_analizi.Rmd", output_dir = "output")
+message("Rendering gdp_analysis.Rmd...")
+rmarkdown::render("gdp_analysis.Rmd", output_dir = "output")
 
-message("Rendering issizlik_analizi.Rmd...")
-rmarkdown::render("issizlik_analizi.Rmd", output_dir = "output")
+message("Rendering unemployment_analysis.Rmd...")
+rmarkdown::render("unemployment_analysis.Rmd", output_dir = "output")
 message("Done.")

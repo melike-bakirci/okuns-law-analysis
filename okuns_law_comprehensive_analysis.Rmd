@@ -1,0 +1,725 @@
+---
+title: "Okun Yasası: GSYİH ve İşsizlik Oranı İlişkisi - Kapsamlı İstatistiksel Analiz"
+author: "Melike Nur Bakirci"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: flatly
+    highlight: tango
+    code_folding: show
+    number_sections: true
+knit: (function(inputFile, encoding) { if (!dir.exists("output")) dir.create("output"); rmarkdown::render(inputFile, encoding = encoding, output_dir = "output") })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width = 10, fig.height = 6)
+
+# Gerekli kütüphaneler
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(corrplot)
+library(lubridate)
+library(scales)
+library(moments)  # Çarpıklık ve basıklık için
+library(car)      # Durbin-Watson testi için
+library(lmtest)   # Breusch-Pagan testi için
+```
+
+# Giriş ve Teorik Çerçeve
+
+## Okun Yasası Nedir?
+
+**Okun Yasası**, Amerikalı ekonomist Arthur Okun tarafından 1962 yılında ortaya atılmış ve ekonomik büyüme ile işsizlik arasındaki ters yönlü ilişkiyi tanımlayan ampirik bir gözlemdir.
+
+### Temel Formül
+
+$$\Delta U = \alpha + \beta \times \Delta Y$$
+
+Burada:
+
+- $\Delta U$: İşsizlik oranındaki değişim
+- $\Delta Y$: GSYİH büyüme oranı (%)
+- $\beta$: Okun katsayısı (genellikle negatif)
+- $\alpha$: Sabit terim
+
+### Beklenen İlişki
+
+- GSYİH artarsa → İşsizlik azalır (ters yönlü ilişki)
+- Okun katsayısı tipik olarak **-0.3 ile -0.5** arasındadır
+- Bu, GSYİH'nin %1 artmasının işsizliği yaklaşık %0.3-0.5 düşürdüğü anlamına gelir
+
+---
+
+# Veri Hazırlama
+
+## Veri Yükleme
+
+```{r load_data}
+# GSYİH verilerini yükle
+gsyih_raw <- read.csv(file.path("data", "gsyih.csv"), skip = 2, header = FALSE, 
+                       col.names = c("Tarih", "GSYIH"))
+
+# İşsizlik verilerini yükle
+unemployment_raw <- read.csv(file.path("data", "unemployment-rate.csv"), skip = 6, 
+                              header = FALSE, col.names = c("Tarih", "Issizlik_Orani"))
+```
+
+## GSYİH Verilerinin Düzenlenmesi
+
+```{r prepare_gsyih}
+gsyih <- gsyih_raw %>%
+  mutate(
+    Yil = as.integer(substr(Tarih, 1, 4)),
+    Ceyrek = substr(Tarih, 6, 7),
+    Ay = case_when(
+      Ceyrek == "Q1" ~ 1,
+      Ceyrek == "Q2" ~ 4,
+      Ceyrek == "Q3" ~ 7,
+      Ceyrek == "Q4" ~ 10,
+      TRUE ~ 1
+    ),
+    Tarih_Obj = as.Date(paste0(Yil, "-", sprintf("%02d", Ay), "-01"))
+  ) %>%
+  filter(!is.na(GSYIH)) %>%
+  arrange(Tarih_Obj) %>%
+  mutate(
+    # GSYH değişim oranı hesaplama (bir önceki çeyreğe göre)
+    GSYIH_Degisim = (GSYIH - lag(GSYIH)) / lag(GSYIH) * 100,
+    # Yıllık değişim oranı (4 çeyrek öncesine göre)
+    GSYIH_Yillik_Degisim = (GSYIH - lag(GSYIH, 4)) / lag(GSYIH, 4) * 100
+  )
+
+kable(head(gsyih, 10), caption = "GSYİH Verileri (İlk 10 Gözlem)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## İşsizlik Verilerinin Düzenlenmesi
+
+```{r prepare_unemployment}
+unemployment <- unemployment_raw %>%
+  mutate(
+    Tarih_Obj = as.Date(paste0(Tarih, "-01"), format = "%Y-%m-%d"),
+    Yil = year(Tarih_Obj),
+    Ay = month(Tarih_Obj)
+  ) %>%
+  filter(!is.na(Issizlik_Orani)) %>%
+  arrange(Tarih_Obj) %>%
+  mutate(
+    # İşsizlik değişimi (bir önceki aya göre)
+    Issizlik_Degisim = Issizlik_Orani - lag(Issizlik_Orani),
+    # Yıllık değişim (12 ay öncesine göre)
+    Issizlik_Yillik_Degisim = Issizlik_Orani - lag(Issizlik_Orani, 12)
+  )
+
+kable(head(unemployment, 10), caption = "İşsizlik Verileri (İlk 10 Gözlem)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Çeyreklik İşsizlik Ortalaması
+
+```{r quarterly_unemployment}
+unemployment_quarterly <- unemployment %>%
+  mutate(Quarter = floor_date(Tarih_Obj, "quarter")) %>%
+  group_by(Quarter) %>%
+  summarise(
+    Issizlik_Orani = mean(Issizlik_Orani, na.rm = TRUE),
+    Issizlik_Min = min(Issizlik_Orani, na.rm = TRUE),
+    Issizlik_Max = max(Issizlik_Orani, na.rm = TRUE),
+    Issizlik_Std = sd(Issizlik_Orani, na.rm = TRUE),
+    Gozlem_Sayisi = n()
+  ) %>%
+  rename(Tarih_Obj = Quarter) %>%
+  arrange(Tarih_Obj) %>%
+  mutate(
+    Issizlik_Degisim = Issizlik_Orani - lag(Issizlik_Orani)
+  )
+
+kable(head(unemployment_quarterly, 10), caption = "Çeyreklik İşsizlik Ortalamaları") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Birleştirilmiş Veri Seti
+
+```{r merge_data}
+merged_data <- inner_join(
+  gsyih %>% select(Tarih_Obj, Yil, Ceyrek, GSYIH, GSYIH_Degisim, GSYIH_Yillik_Degisim),
+  unemployment_quarterly %>% select(Tarih_Obj, Issizlik_Orani, Issizlik_Degisim),
+  by = "Tarih_Obj"
+) %>%
+  filter(!is.na(GSYIH_Degisim) & !is.na(Issizlik_Degisim))
+
+kable(merged_data, caption = "Birleştirilmiş Veri Seti (Okun Yasası Analizi İçin)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), 
+                full_width = FALSE) %>%
+  scroll_box(height = "400px")
+```
+
+---
+
+# Betimsel İstatistikler
+
+## GSYİH Betimsel İstatistikleri
+
+```{r gsyih_descriptive}
+gsyih_stats <- gsyih %>%
+  filter(!is.na(GSYIH)) %>%
+  summarise(
+    `Gözlem Sayısı` = n(),
+    `Ortalama` = mean(GSYIH),
+    `Medyan` = median(GSYIH),
+    `Standart Sapma` = sd(GSYIH),
+    `Minimum` = min(GSYIH),
+    `Maksimum` = max(GSYIH),
+    `Değişim Katsayısı (%)` = (sd(GSYIH) / mean(GSYIH)) * 100,
+    `Çeyrekler Arası Aralık` = IQR(GSYIH),
+    `1. Çeyrek (Q1)` = quantile(GSYIH, 0.25),
+    `3. Çeyrek (Q3)` = quantile(GSYIH, 0.75),
+    `Çarpıklık` = skewness(GSYIH),
+    `Basıklık` = kurtosis(GSYIH)
+  ) %>%
+  pivot_longer(everything(), names_to = "İstatistik", values_to = "Değer")
+
+kable(gsyih_stats, caption = "GSYİH Betimsel İstatistikleri", digits = 2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  row_spec(c(1, 6, 7, 11, 12), bold = TRUE, background = "#f0f8ff")
+```
+
+## İşsizlik Oranı Betimsel İstatistikleri
+
+```{r unemployment_descriptive}
+unemployment_stats <- unemployment %>%
+  filter(!is.na(Issizlik_Orani)) %>%
+  summarise(
+    `Gözlem Sayısı` = n(),
+    `Ortalama (%)` = mean(Issizlik_Orani),
+    `Medyan (%)` = median(Issizlik_Orani),
+    `Standart Sapma` = sd(Issizlik_Orani),
+    `Minimum (%)` = min(Issizlik_Orani),
+    `Maksimum (%)` = max(Issizlik_Orani),
+    `Değişim Katsayısı (%)` = (sd(Issizlik_Orani) / mean(Issizlik_Orani)) * 100,
+    `Çeyrekler Arası Aralık` = IQR(Issizlik_Orani),
+    `1. Çeyrek (Q1)` = quantile(Issizlik_Orani, 0.25),
+    `3. Çeyrek (Q3)` = quantile(Issizlik_Orani, 0.75),
+    `Çarpıklık` = skewness(Issizlik_Orani),
+    `Basıklık` = kurtosis(Issizlik_Orani)
+  ) %>%
+  pivot_longer(everything(), names_to = "İstatistik", values_to = "Değer")
+
+kable(unemployment_stats, caption = "İşsizlik Oranı Betimsel İstatistikleri", digits = 2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  row_spec(c(1, 5, 6, 11, 12), bold = TRUE, background = "#fff0f5")
+```
+
+## Karşılaştırmalı Betimsel İstatistik Tablosu
+
+```{r comparative_stats}
+comparative_table <- data.frame(
+  İstatistik = c("Gözlem Sayısı", "Ortalama", "Medyan", "Standart Sapma", 
+                 "Minimum", "Maksimum", "Değişim Katsayısı (%)", 
+                 "Çarpıklık", "Basıklık"),
+  `GSYİH (Milyon TL)` = c(
+    nrow(gsyih %>% filter(!is.na(GSYIH))),
+    mean(gsyih$GSYIH, na.rm = TRUE),
+    median(gsyih$GSYIH, na.rm = TRUE),
+    sd(gsyih$GSYIH, na.rm = TRUE),
+    min(gsyih$GSYIH, na.rm = TRUE),
+    max(gsyih$GSYIH, na.rm = TRUE),
+    (sd(gsyih$GSYIH, na.rm = TRUE) / mean(gsyih$GSYIH, na.rm = TRUE)) * 100,
+    skewness(gsyih$GSYIH, na.rm = TRUE),
+    kurtosis(gsyih$GSYIH, na.rm = TRUE)
+  ),
+  `İşsizlik Oranı (%)` = c(
+    nrow(unemployment %>% filter(!is.na(Issizlik_Orani))),
+    mean(unemployment$Issizlik_Orani, na.rm = TRUE),
+    median(unemployment$Issizlik_Orani, na.rm = TRUE),
+    sd(unemployment$Issizlik_Orani, na.rm = TRUE),
+    min(unemployment$Issizlik_Orani, na.rm = TRUE),
+    max(unemployment$Issizlik_Orani, na.rm = TRUE),
+    (sd(unemployment$Issizlik_Orani, na.rm = TRUE) / mean(unemployment$Issizlik_Orani, na.rm = TRUE)) * 100,
+    skewness(unemployment$Issizlik_Orani, na.rm = TRUE),
+    kurtosis(unemployment$Issizlik_Orani, na.rm = TRUE)
+  )
+)
+
+kable(comparative_table, caption = "GSYİH ve İşsizlik Oranı Karşılaştırmalı İstatistikler", 
+      digits = 2, col.names = c("İstatistik", "GSYİH (Milyon TL)", "İşsizlik Oranı (%)")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "bordered")) %>%
+  column_spec(2, background = "#e6f3ff") %>%
+  column_spec(3, background = "#ffe6ee")
+```
+
+## Yıllık Betimsel İstatistikler
+
+### GSYİH Yıllık Özet
+
+```{r gsyih_yearly}
+gsyih_yearly <- gsyih %>%
+  group_by(Yil) %>%
+  summarise(
+    `Ortalama GSYİH` = mean(GSYIH, na.rm = TRUE),
+    `Toplam GSYİH` = sum(GSYIH, na.rm = TRUE),
+    `Std. Sapma` = sd(GSYIH, na.rm = TRUE),
+    `Min` = min(GSYIH, na.rm = TRUE),
+    `Max` = max(GSYIH, na.rm = TRUE)
+  )
+
+kable(gsyih_yearly, caption = "Yıllık GSYİH Özeti", digits = 0) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+### İşsizlik Yıllık Özet
+
+```{r unemployment_yearly}
+unemployment_yearly <- unemployment %>%
+  group_by(Yil) %>%
+  summarise(
+    `Ortalama İşsizlik (%)` = mean(Issizlik_Orani, na.rm = TRUE),
+    `Std. Sapma` = sd(Issizlik_Orani, na.rm = TRUE),
+    `Min (%)` = min(Issizlik_Orani, na.rm = TRUE),
+    `Max (%)` = max(Issizlik_Orani, na.rm = TRUE),
+    `Gözlem` = n()
+  )
+
+kable(unemployment_yearly, caption = "Yıllık İşsizlik Özeti", digits = 2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+---
+
+# Görselleştirmeler
+
+## Zaman Serisi Grafikleri
+
+### GSYİH Zaman Serisi
+
+```{r gsyih_timeseries, fig.height=5}
+ggplot(gsyih, aes(x = Tarih_Obj, y = GSYIH / 1000000)) +
+  geom_line(color = "#2c3e50", size = 1.2) +
+  geom_point(color = "#3498db", size = 2) +
+  geom_smooth(method = "loess", color = "#e74c3c", linetype = "dashed", se = FALSE) +
+  scale_y_continuous(labels = comma) +
+  scale_x_date(date_labels = "%Y", date_breaks = "2 years") +
+  labs(
+    title = "Türkiye GSYİH Zaman Serisi (Çeyreklik)",
+    subtitle = "1998-2016 Dönemi",
+    x = "Yıl",
+    y = "GSYİH (Trilyon TL)",
+    caption = "Kaynak: TCMB EVDS"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+### İşsizlik Oranı Zaman Serisi
+
+```{r unemployment_timeseries, fig.height=5}
+ggplot(unemployment, aes(x = Tarih_Obj, y = Issizlik_Orani)) +
+  geom_line(color = "#c0392b", size = 1) +
+  geom_point(color = "#e74c3c", size = 1.5, alpha = 0.7) +
+  geom_hline(yintercept = mean(unemployment$Issizlik_Orani, na.rm = TRUE), 
+             linetype = "dashed", color = "#2ecc71", size = 1) +
+  annotate("text", x = max(unemployment$Tarih_Obj), 
+           y = mean(unemployment$Issizlik_Orani, na.rm = TRUE) + 0.5,
+           label = paste("Ortalama:", round(mean(unemployment$Issizlik_Orani, na.rm = TRUE), 1), "%"),
+           color = "#2ecc71", fontface = "bold") +
+  scale_x_date(date_labels = "%Y", date_breaks = "2 years") +
+  labs(
+    title = "Türkiye İşsizlik Oranı Zaman Serisi (Aylık)",
+    subtitle = "2005-2020 Dönemi",
+    x = "Yıl",
+    y = "İşsizlik Oranı (%)",
+    caption = "Kaynak: TCMB EVDS"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+### Birleşik Zaman Serisi (Dual Axis)
+
+```{r combined_timeseries, fig.height=6}
+# Ölçekleme için katsayı
+scale_factor <- max(merged_data$GSYIH, na.rm = TRUE) / max(merged_data$Issizlik_Orani, na.rm = TRUE)
+
+ggplot(merged_data, aes(x = Tarih_Obj)) +
+  geom_line(aes(y = GSYIH / 1000000, color = "GSYİH"), size = 1.2) +
+  geom_line(aes(y = Issizlik_Orani * scale_factor / 1000000, color = "İşsizlik Oranı"), size = 1.2) +
+  scale_y_continuous(
+    name = "GSYİH (Trilyon TL)",
+    sec.axis = sec_axis(~. * 1000000 / scale_factor, name = "İşsizlik Oranı (%)")
+  ) +
+  scale_color_manual(values = c("GSYİH" = "#3498db", "İşsizlik Oranı" = "#e74c3c")) +
+  labs(
+    title = "GSYİH ve İşsizlik Oranı Karşılaştırması",
+    subtitle = "Okun Yasası - Ters Yönlü İlişki",
+    x = "Yıl",
+    color = "Değişken"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold", size = 14)
+  )
+```
+
+## Histogram ve Dağılım Grafikleri
+
+### GSYİH Dağılımı
+
+```{r gsyih_histogram, fig.height=4}
+ggplot(gsyih, aes(x = GSYIH / 1000000)) +
+  geom_histogram(aes(y = ..density..), bins = 20, fill = "#3498db", color = "white", alpha = 0.7) +
+  geom_density(color = "#2c3e50", size = 1.2) +
+  geom_vline(xintercept = mean(gsyih$GSYIH, na.rm = TRUE) / 1000000, 
+             color = "#e74c3c", linetype = "dashed", size = 1) +
+  labs(
+    title = "GSYİH Dağılımı",
+    x = "GSYİH (Trilyon TL)",
+    y = "Yoğunluk"
+  ) +
+  theme_minimal()
+```
+
+### İşsizlik Oranı Dağılımı
+
+```{r unemployment_histogram, fig.height=4}
+ggplot(unemployment, aes(x = Issizlik_Orani)) +
+  geom_histogram(aes(y = ..density..), bins = 20, fill = "#e74c3c", color = "white", alpha = 0.7) +
+  geom_density(color = "#2c3e50", size = 1.2) +
+  geom_vline(xintercept = mean(unemployment$Issizlik_Orani, na.rm = TRUE), 
+             color = "#3498db", linetype = "dashed", size = 1) +
+  labs(
+    title = "İşsizlik Oranı Dağılımı",
+    x = "İşsizlik Oranı (%)",
+    y = "Yoğunluk"
+  ) +
+  theme_minimal()
+```
+
+## Kutu Grafikleri (Box Plot)
+
+```{r boxplots, fig.height=5}
+# Yıllara göre işsizlik box plot
+ggplot(unemployment, aes(x = factor(Yil), y = Issizlik_Orani, fill = factor(Yil))) +
+  geom_boxplot(alpha = 0.7, outlier.color = "#e74c3c") +
+  scale_fill_viridis_d() +
+  labs(
+    title = "Yıllara Göre İşsizlik Oranı Dağılımı",
+    x = "Yıl",
+    y = "İşsizlik Oranı (%)"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+---
+
+# Korelasyon Analizi
+
+## Pearson Korelasyon Katsayısı
+
+```{r correlation}
+# Seviye bazında korelasyon
+cor_level <- cor(merged_data$GSYIH, merged_data$Issizlik_Orani, use = "complete.obs")
+
+# Değişim bazında korelasyon
+cor_change <- cor(merged_data$GSYIH_Degisim, merged_data$Issizlik_Degisim, 
+                  use = "complete.obs")
+
+# Korelasyon tablosu
+cor_table <- data.frame(
+  `Korelasyon Türü` = c("Seviye Bazında (GSYİH vs İşsizlik)", 
+                        "Değişim Bazında (ΔGSYIH vs Δİşsizlik)"),
+  `Pearson r` = c(cor_level, cor_change),
+  `Yorum` = c(
+    ifelse(cor_level < 0, "Negatif İlişki (Beklenen)", "Pozitif İlişki (Beklenmeyen)"),
+    ifelse(cor_change < 0, "Okun Yasası Destekleniyor", "Okun Yasası Desteklenmiyor")
+  )
+)
+
+kable(cor_table, caption = "Korelasyon Analizi Sonuçları", digits = 4) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "bordered"))
+```
+
+## Korelasyon Testi
+
+```{r cor_test}
+# Seviye bazında korelasyon testi
+cor_test_level <- cor.test(merged_data$GSYIH, merged_data$Issizlik_Orani)
+
+# Değişim bazında korelasyon testi
+cor_test_change <- cor.test(merged_data$GSYIH_Degisim, merged_data$Issizlik_Degisim)
+
+cor_test_table <- data.frame(
+  Test = c("Seviye Bazında", "Değişim Bazında"),
+  `r Değeri` = c(cor_test_level$estimate, cor_test_change$estimate),
+  `t İstatistiği` = c(cor_test_level$statistic, cor_test_change$statistic),
+  `p Değeri` = c(cor_test_level$p.value, cor_test_change$p.value),
+  `%95 GA Alt` = c(cor_test_level$conf.int[1], cor_test_change$conf.int[1]),
+  `%95 GA Üst` = c(cor_test_level$conf.int[2], cor_test_change$conf.int[2])
+)
+
+kable(cor_test_table, caption = "Pearson Korelasyon Testi Sonuçları", digits = 4) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+## Serpilme Diyagramı (Scatter Plot)
+
+### Seviye Bazında İlişki
+
+```{r scatter_level, fig.height=5}
+ggplot(merged_data, aes(x = GSYIH / 1000000, y = Issizlik_Orani)) +
+  geom_point(color = "#3498db", size = 3, alpha = 0.7) +
+  geom_smooth(method = "lm", color = "#e74c3c", fill = "#fadbd8", se = TRUE) +
+  annotate("text", x = max(merged_data$GSYIH) / 1000000 * 0.8, 
+           y = max(merged_data$Issizlik_Orani) * 0.9,
+           label = paste("r =", round(cor_level, 3)),
+           size = 5, fontface = "bold", color = "#2c3e50") +
+  labs(
+    title = "GSYİH ve İşsizlik Oranı İlişkisi (Seviye Bazında)",
+    subtitle = "Regresyon Doğrusu ve %95 Güven Aralığı",
+    x = "GSYİH (Trilyon TL)",
+    y = "İşsizlik Oranı (%)"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14))
+```
+
+### Değişim Bazında İlişki (Okun Yasası)
+
+```{r scatter_change, fig.height=5}
+ggplot(merged_data, aes(x = GSYIH_Degisim, y = Issizlik_Degisim)) +
+  geom_point(color = "#9b59b6", size = 3, alpha = 0.7) +
+  geom_smooth(method = "lm", color = "#27ae60", fill = "#d5f5e3", se = TRUE) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  annotate("text", x = max(merged_data$GSYIH_Degisim, na.rm = TRUE) * 0.7, 
+           y = max(merged_data$Issizlik_Degisim, na.rm = TRUE) * 0.8,
+           label = paste("r =", round(cor_change, 3)),
+           size = 5, fontface = "bold", color = "#2c3e50") +
+  labs(
+    title = "Okun Yasası: GSYİH Değişimi ve İşsizlik Değişimi İlişkisi",
+    subtitle = "Değişim Bazında Analiz",
+    x = "GSYİH Değişim Oranı (%)",
+    y = "İşsizlik Değişimi (% puan)"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14))
+```
+
+---
+
+# Regresyon Analizi
+
+## Basit Doğrusal Regresyon (OLS)
+
+### Model 1: Seviye Bazında
+
+```{r regression_level}
+model_level <- lm(Issizlik_Orani ~ GSYIH, data = merged_data)
+summary_level <- summary(model_level)
+
+# Model özeti tablosu
+model_coef_level <- data.frame(
+  Parametre = c("Sabit (Intercept)", "GSYİH Katsayısı"),
+  Tahmin = coef(model_level),
+  `Std. Hata` = summary_level$coefficients[, 2],
+  `t Değeri` = summary_level$coefficients[, 3],
+  `Pr(>|t|)` = summary_level$coefficients[, 4]
+)
+
+kable(model_coef_level, caption = "Model 1: Seviye Bazında Regresyon Katsayıları", 
+      digits = 6, row.names = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+### Model 2: Değişim Bazında (Okun Modeli)
+
+```{r regression_change}
+model_okun <- lm(Issizlik_Degisim ~ GSYIH_Degisim, data = merged_data)
+summary_okun <- summary(model_okun)
+
+model_coef_okun <- data.frame(
+  Parametre = c("Sabit (α)", "Okun Katsayısı (β)"),
+  Tahmin = coef(model_okun),
+  `Std. Hata` = summary_okun$coefficients[, 2],
+  `t Değeri` = summary_okun$coefficients[, 3],
+  `Pr(>|t|)` = summary_okun$coefficients[, 4]
+)
+
+kable(model_coef_okun, caption = "Model 2: Okun Modeli Regresyon Katsayıları", 
+      digits = 4, row.names = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+## Model Karşılaştırma Tablosu
+
+```{r model_comparison}
+model_comparison <- data.frame(
+  `Model` = c("Model 1 (Seviye)", "Model 2 (Okun)"),
+  `R²` = c(summary_level$r.squared, summary_okun$r.squared),
+  `Düzeltilmiş R²` = c(summary_level$adj.r.squared, summary_okun$adj.r.squared),
+  `F İstatistiği` = c(summary_level$fstatistic[1], summary_okun$fstatistic[1]),
+  `Kalıntı Std. Hatası` = c(summary_level$sigma, summary_okun$sigma),
+  `Serbestlik Derecesi` = c(summary_level$df[2], summary_okun$df[2])
+)
+
+kable(model_comparison, caption = "Model Karşılaştırma Özeti", digits = 4) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "bordered"))
+```
+
+## Regresyon Diagnostik Grafikleri
+
+```{r regression_diagnostics, fig.height=8}
+par(mfrow = c(2, 2))
+plot(model_okun, main = "Okun Modeli Diagnostik Grafikleri")
+```
+
+---
+
+# İstatistiksel Testler
+
+## Normallik Testleri
+
+```{r normality_tests}
+# Shapiro-Wilk testi
+shapiro_gsyih <- shapiro.test(gsyih$GSYIH)
+shapiro_unemployment <- shapiro.test(unemployment$Issizlik_Orani)
+shapiro_residuals <- shapiro.test(residuals(model_okun))
+
+normality_table <- data.frame(
+  Değişken = c("GSYİH", "İşsizlik Oranı", "Okun Model Kalıntıları"),
+  `W İstatistiği` = c(shapiro_gsyih$statistic, shapiro_unemployment$statistic, 
+                      shapiro_residuals$statistic),
+  `p Değeri` = c(shapiro_gsyih$p.value, shapiro_unemployment$p.value,
+                 shapiro_residuals$p.value),
+  Sonuç = c(
+    ifelse(shapiro_gsyih$p.value > 0.05, "Normal Dağılım", "Normal Değil"),
+    ifelse(shapiro_unemployment$p.value > 0.05, "Normal Dağılım", "Normal Değil"),
+    ifelse(shapiro_residuals$p.value > 0.05, "Normal Dağılım", "Normal Değil")
+  )
+)
+
+kable(normality_table, caption = "Shapiro-Wilk Normallik Testi Sonuçları", digits = 4) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+## Otokorelasyon Testi (Durbin-Watson)
+
+```{r durbin_watson}
+dw_test <- durbinWatsonTest(model_okun)
+
+dw_table <- data.frame(
+  Test = "Durbin-Watson",
+  `DW İstatistiği` = dw_test$dw,
+  `p Değeri` = dw_test$p,
+  Yorum = case_when(
+    dw_test$dw < 1.5 ~ "Pozitif Otokorelasyon",
+    dw_test$dw > 2.5 ~ "Negatif Otokorelasyon",
+    TRUE ~ "Otokorelasyon Yok"
+  )
+)
+
+kable(dw_table, caption = "Durbin-Watson Otokorelasyon Testi", digits = 4) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+## Heteroskedastisite Testi (Breusch-Pagan)
+
+```{r breusch_pagan}
+bp_test <- bptest(model_okun)
+
+bp_table <- data.frame(
+  Test = "Breusch-Pagan",
+  `BP İstatistiği` = bp_test$statistic,
+  `Serbestlik Derecesi` = bp_test$parameter,
+  `p Değeri` = bp_test$p.value,
+  Sonuç = ifelse(bp_test$p.value > 0.05, "Homoskedastisite", "Heteroskedastisite")
+)
+
+kable(bp_table, caption = "Breusch-Pagan Heteroskedastisite Testi", digits = 4) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+---
+
+# Frekans Dağılım Tablosu
+
+## İşsizlik Oranı Frekans Dağılımı
+
+```{r frequency_distribution}
+# İşsizlik oranları için sınıf aralıkları
+unemployment_freq <- unemployment %>%
+  mutate(Sinif = cut(Issizlik_Orani, 
+                     breaks = c(7, 8, 9, 10, 11, 12, 13, 14, 15),
+                     labels = c("7-8", "8-9", "9-10", "10-11", "11-12", "12-13", "13-14", "14-15"),
+                     include.lowest = TRUE)) %>%
+  group_by(Sinif) %>%
+  summarise(Frekans = n()) %>%
+  mutate(
+    `Kümülatif Frekans` = cumsum(Frekans),
+    `Yüzde (%)` = round(Frekans / sum(Frekans) * 100, 2),
+    `Kümülatif Yüzde (%)` = round(`Kümülatif Frekans` / sum(Frekans) * 100, 2)
+  )
+
+kable(unemployment_freq, caption = "İşsizlik Oranı Frekans Dağılım Tablosu") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+---
+
+# Sonuç ve Değerlendirme
+
+## Bulgular Özeti
+
+```{r summary_findings}
+findings <- data.frame(
+  `Bulgu` = c(
+    "Korelasyon (Seviye)",
+    "Korelasyon (Değişim)",
+    "Okun Katsayısı (β)",
+    "Model R²",
+    "İlişki Yönü"
+  ),
+  `Değer` = c(
+    round(cor_level, 4),
+    round(cor_change, 4),
+    round(coef(model_okun)[2], 4),
+    round(summary_okun$r.squared, 4),
+    ifelse(coef(model_okun)[2] < 0, "Negatif (Beklenen)", "Pozitif")
+  ),
+  `Yorum` = c(
+    ifelse(cor_level < 0, "GSYİH arttıkça işsizlik azalıyor", "Beklenmeyen ilişki"),
+    ifelse(cor_change < 0, "Okun Yasası destekleniyor", "Okun Yasası zayıf"),
+    "GSYİH %1 artığında işsizlikteki değişim",
+    "Modelin açıklayıcılık gücü",
+    "Teorik beklentiyle uyum"
+  )
+)
+
+kable(findings, caption = "Analiz Sonuçları Özeti") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "bordered")) %>%
+  column_spec(1, bold = TRUE)
+```
+
+## Okun Yasası Yorumu
+
+> **Sonuç:** Bu çalışmada Türkiye ekonomisi için GSYİH ile işsizlik oranı arasındaki ilişki incelenmiştir. Analiz sonuçları, Okun Yasası'nın temel varsayımını desteklemektedir: **Ekonomik büyüme (GSYİH artışı) ile işsizlik oranı arasında ters yönlü bir ilişki bulunmaktadır.**
+
+---
+
+*Bu rapor `r Sys.Date()` tarihinde R Markdown ile otomatik olarak oluşturulmuştur.*

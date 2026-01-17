@@ -27,12 +27,14 @@ okuns-law-analysis/
 │   ├── gsyih.csv             # GSYİH verileri (Çeyreklik)
 │   └── unemployment-rate.csv # İşsizlik oranı verileri (Aylık)
 ├── output/                    # Oluşturulan raporların kaydedildiği klasör
-│   ├── gdp_analysis.html    # GSYİH analiz raporu çıktısı
-│   └── unemployment_analysis.html # İşsizlik analiz raporu çıktısı
-├── gdp_analysis.Rmd          # GSYİH analizi için R Markdown kaynak kodu
-├── unemployment_analysis.Rmd       # İşsizlik analizi için R Markdown kaynak kodu
-├── run_analysis.R             # Tüm analizleri çalıştırıp raporları üreten ana R betiği
-└── README.md                  # Proje dokümantasyonu
+│   ├── gdp_analysis.html                    # GSYİH analiz raporu
+│   ├── unemployment_analysis.html           # İşsizlik analiz raporu
+│   └── okuns_law_comprehensive_analysis.html # Kapsamlı Okun Yasası analizi
+├── gdp_analysis.Rmd                         # GSYİH analizi kaynak kodu
+├── unemployment_analysis.Rmd                # İşsizlik analizi kaynak kodu
+├── okuns_law_comprehensive_analysis.Rmd     # 🌟 Kapsamlı istatistiksel analiz
+├── run_analysis.R                           # Ana R betiği
+└── README.md                                # Proje dokümantasyonu
 ```
 
 ## Kurulum ve Çalıştırma
@@ -62,6 +64,47 @@ Bu işlem sonucunda `output` klasörü içerisinde `gdp_analysis.html` ve `unemp
 - İşsizlik oranlarının aylık değişimi incelenir.
 - GSYİH verisi ile birleştirilerek ekonomik büyümenin işsizlik üzerindeki etkisi görselleştirilir.
 
+### 3. 🌟 Kapsamlı Okun Yasası Analizi (`okuns_law_comprehensive_analysis.Rmd`)
+
+Bu dosya, projenin ana analiz dosyasıdır ve aşağıdaki kapsamlı istatistiksel içerikleri barındırır:
+
+#### Betimsel İstatistikler
+- Ortalama, medyan, standart sapma, minimum, maksimum
+- Değişim katsayısı (CV)
+- Çeyrekler arası aralık (IQR)
+- Çarpıklık (Skewness) ve basıklık (Kurtosis)
+- Yıllık ve çeyreklik özet tablolar
+- Karşılaştırmalı istatistik tabloları
+
+#### Görselleştirmeler
+- Zaman serisi grafikleri (GSYİH ve İşsizlik)
+- Birleşik çift eksenli grafik
+- Histogram ve yoğunluk grafikleri
+- Kutu grafikleri (Box Plot)
+- Serpilme diyagramları (Scatter Plot)
+- Regresyon diagnostik grafikleri
+
+#### Korelasyon Analizi
+- Pearson korelasyon katsayısı
+- Korelasyon testi (t-testi, p-değeri, güven aralıkları)
+- Seviye ve değişim bazında korelasyon
+
+#### Regresyon Analizi
+- Basit doğrusal regresyon (OLS)
+- Okun katsayısı tahmini
+- Model karşılaştırma tablosu
+- R², düzeltilmiş R², F istatistiği
+
+#### İstatistiksel Testler
+- **Shapiro-Wilk Normallik Testi**
+- **Durbin-Watson Otokorelasyon Testi**
+- **Breusch-Pagan Heteroskedastisite Testi**
+
+#### Frekans Dağılım Tablosu
+- Sınıf aralıkları
+- Frekans ve kümülatif frekans
+- Yüzde dağılımları
+
 ## Kullanılan Kütüphaneler
 
 Analizlerde aşağıdaki R paketleri kullanılmıştır:
@@ -69,8 +112,13 @@ Analizlerde aşağıdaki R paketleri kullanılmıştır:
 - **ggplot2**: Veri görselleştirme
 - **dplyr / tidyr**: Veri manipülasyonu ve düzenleme
 - **knitr / rmarkdown**: Dinamik rapor oluşturma
+- **kableExtra**: Gelişmiş tablo formatlaması
 - **lubridate**: Tarih ve zaman verilerinin işlenmesi
 - **corrplot**: Korelasyon analizi
-- **CBRT**: Veri çekme ve işleme (ilgili veri setleri için)
+- **scales**: Sayı ve eksen formatlaması
+- **moments**: Çarpıklık ve basıklık hesaplamaları
+- **car**: Durbin-Watson otokorelasyon testi
+- **lmtest**: Breusch-Pagan heteroskedastisite testi
+- **CBRT**: TCMB veri çekme (ilgili veri setleri için)
 
 ---

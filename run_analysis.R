@@ -6,7 +6,14 @@ options(repos = c(CRAN = "https://cloud.r-project.org"))
 Sys.setenv(RSTUDIO_PANDOC = "C:/Program Files/RStudio/resources/app/bin/quarto/bin/tools")
 
 # List of required packages
-required_packages <- c("ggplot2", "dplyr", "tidyr", "knitr", "corrplot", "lubridate", "rmarkdown")
+required_packages <- c(
+  "ggplot2", "dplyr", "tidyr", "knitr", "corrplot", "lubridate", "rmarkdown",
+  "kableExtra",  # Gelişmiş tablo formatlaması
+  "scales",      # Sayı formatlama
+  "moments",     # Çarpıklık ve basıklık hesaplamaları
+  "car",         # Durbin-Watson testi
+  "lmtest"       # Breusch-Pagan testi
+)
 
 # Check and install packages
 for (pkg in required_packages) {
@@ -40,4 +47,8 @@ rmarkdown::render("gdp_analysis.Rmd", output_dir = "output")
 
 message("Rendering unemployment_analysis.Rmd...")
 rmarkdown::render("unemployment_analysis.Rmd", output_dir = "output")
-message("Done.")
+
+message("Rendering okuns_law_comprehensive_analysis.Rmd (Kapsamlı Analiz)...")
+rmarkdown::render("okuns_law_comprehensive_analysis.Rmd", output_dir = "output")
+
+message("Done - Tüm raporlar output/ klasörüne oluşturuldu.")

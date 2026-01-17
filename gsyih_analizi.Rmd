@@ -1,0 +1,102 @@
+---
+title: "GSYİH Veri Analizi"
+author: "Melike Bakirci"
+date: "`r Sys.Date()`"
+output: html_document
+knit: (function(inputFile, encoding) { if (!dir.exists("output")) dir.create("output"); rmarkdown::render(inputFile, encoding = encoding, output_dir = "output") })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(CBRT)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(corrplot)
+library(lubridate)
+```
+
+## GSYİH Verilerinin Hazırlanması
+
+Bu rapor, `gsyih.csv` dosyasındaki verilerin analizine odaklanmaktadır.
+
+```{r load_gsyih}
+# GSYİH verilerini yükle
+gsyih <- read.csv(file.path("data", "gsyih.csv"), skip = 2, header = FALSE, col.names = c("Tarih", "GSYIH"))
+
+# Tarih formatını düzenle
+gsyih <- gsyih %>%
+  mutate(
+    Yil = substr(Tarih, 1, 4),
+    Ceyrek = substr(Tarih, 6, 7),
+    Ay = case_when(
+      Ceyrek == "Q1" ~ "01",
+      Ceyrek == "Q2" ~ "04",
+      Ceyrek == "Q3" ~ "07",
+      Ceyrek == "Q4" ~ "10",
+      TRUE ~ "01"
+    ),
+    Tarih_Obj = as.Date(paste0(Yil, "-", Ay, "-01"))
+  ) %>%
+  filter(!is.na(GSYIH))
+```
+
+## GSYİH Zaman Serisi Grafiği
+
+Türkiye ekonomisinin büyüklüğünü gösteren GSYİH verilerinin zaman içindeki değişimi:
+
+```{r gsyih_plot}
+ggplot(gsyih, aes(x = Tarih_Obj, y = GSYIH)) +
+  geom_line(color = "darkblue", size = 1) +
+  geom_point() +
+  labs(title = "GSYİH Zaman Serisi (Çeyreklik)", x = "Yıl", y = "Milyon TL") +
+  theme_minimal()
+```
+
+## GSYİH Betimsel İstatistikler
+
+```{r gsyih_stats}
+stats <- gsyih %>%
+  summarise(
+    Ortalama = mean(GSYIH, na.rm = TRUE),
+    Medyan = median(GSYIH, na.rm = TRUE),
+    Min = min(GSYIH, na.rm = TRUE),
+    Max = max(GSYIH, na.rm = TRUE),
+    Sapma = sd(GSYIH, na.rm = TRUE)
+  )
+
+kable(stats, caption = "GSYİH Özet İstatistikleri")
+```
+
+## İşsizlik Oranı ile İlişki (Korelasyon ve Serpilme)
+
+GSYİH'nin işsizlik oranı ile olan ilişkisini incelemek için işsizlik verilerini de dahil ediyoruz.
+
+```{r relationship}
+# İşsizlik verilerini yükle ve çeyreklik bazda hazırla
+unemployment <- read.csv(file.path("data", "unemployment-rate.csv"), skip = 6, header = FALSE, col.names = c("Tarih", "Issizlik_Orani"))
+unemployment <- unemployment %>%
+  mutate(Tarih_Obj = as.Date(paste0(Tarih, "-01"), format = "%Y-%m-%d")) %>%
+  mutate(Quarter = floor_date(Tarih_Obj, "quarter")) %>%
+  group_by(Quarter) %>%
+  summarise(Issizlik_Orani = mean(Issizlik_Orani, na.rm = TRUE)) %>%
+  rename(Tarih_Obj = Quarter)
+
+# Birleştirme
+merged <- inner_join(gsyih, unemployment, by = "Tarih_Obj")
+
+# Korelasyon
+cor_val <- cor(merged$GSYIH, merged$Issizlik_Orani, use = "complete.obs")
+```
+
+Değişkenler arasındaki korelasyon katsayısı: **`r round(cor_val, 3)`**
+
+### Serpilme Eğrisi
+```{r scatter}
+ggplot(merged, aes(x = GSYIH, y = Issizlik_Orani)) +
+  geom_point(color = "blue") +
+  geom_smooth(method = "lm", color = "red") +
+  labs(title = "GSYİH ve İşsizlik Oranı İlişkisi", x = "GSYİH", y = "İşsizlik Oranı (%)") +
+  theme_minimal()
+```

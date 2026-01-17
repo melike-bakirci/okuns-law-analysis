@@ -1,0 +1,12 @@
+# R related
+.Rhistory
+.RData
+.Ruserdata
+*-Ex.R
+/*.tar.gz
+/*.Rcheck/
+.Rproj.user/
+
+# Project specific outputs
+output/
+*.html

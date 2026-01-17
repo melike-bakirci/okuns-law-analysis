@@ -1,0 +1,6 @@
+# Mark generated HTML files as linguistically non-important
+*.html linguist-generated=true
+output/* linguist-generated=true
+
+# Also mark data files
+data/*.csv linguist-documentation=true

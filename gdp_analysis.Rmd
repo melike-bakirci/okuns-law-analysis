@@ -1,6 +1,6 @@
 ---
 title: "GSYİH Veri Analizi"
-author: "Melike Bakirci"
+author: "Melike Nur Bakirci"
 date: "`r Sys.Date()`"
 output: html_document
 knit: (function(inputFile, encoding) { if (!dir.exists("output")) dir.create("output"); rmarkdown::render(inputFile, encoding = encoding, output_dir = "output") })

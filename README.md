@@ -1,6 +1,6 @@
 # GSYİH ve İşsizlik Oranı Veri Analizi Projesi
 
-Bu proje, Türkiye'nin Gayri Safi Yurt İçi Hasıla (GSYİH) verileri ile İşsizlik Oranı arasındaki ilişkiyi analiz etmek amacıyla hazırlanmıştır. R programlama dili (CBRT Kütüphanesi) ve R Markdown kullanılarak veri görselleştirme, betimsel istatistikler ve korelasyon analizleri yapılmaktadır.
+Bu proje, Türkiye Cumhuriyet Merkez Bankası (TCMB) verileri kullanılarak, Türkiye'nin Gayri Safi Yurt İçi Hasıla (GSYİH) verileri ile İşsizlik Oranı arasındaki ilişkiyi analiz etmek amacıyla hazırlanmıştır. R programlama dili (CBRT Kütüphanesi) ve R Markdown kullanılarak veri görselleştirme, betimsel istatistikler ve korelasyon analizleri yapılmaktadır. Teoriyi pratik uygulamaya döken eğitim amaçlı bir proje olarak hazırlanmıştır.
 
 ## İçindekiler
 
@@ -12,7 +12,7 @@ Bu proje, Türkiye'nin Gayri Safi Yurt İçi Hasıla (GSYİH) verileri ile İşs
 
 ## Proje Hakkında
 
-Bu çalışmanın temel amacı, ekonomik büyüme (GSYİH) ile işsizlik oranları arasındaki ilişkiyi incelemektir. Bu ilişki literatürde **Okun Yasası (Okun's Law)** olarak bilinir. Proje kapsamında:
+Bu çalışmanın temel amacı, ekonomik büyüme (GSYİH) ile işsizlik oranları arasındaki ilişkiyi incelemektir. Bu ilişki literatürde **Okun Yasası (Okun's Law)** olarak bilinir. Veriler TCMB (EVDS) üzerinden temin edilmiştir. Proje kapsamında:
 - Zaman serisi grafikleri oluşturulmuş,
 - Temel istatistiksel özetler çıkarılmış,
 - İki değişken arasındaki korelasyon hesaplanmış ve serpilme diyagramı ile görselleştirilmiştir.
